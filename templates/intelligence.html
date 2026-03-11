@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Intelligence – SAP Vendor Risk Monitoring</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+
+    /* ── Single column layout ── */
+    .intel-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── Section card ── */
+    .intel-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-head h3 {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-head p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+    .section-body { padding: 18px 20px; }
+
+    /* ── NL Query ── */
+    .section-head.nl { background: rgba(168,85,247,0.04); }
+    .section-head.nl h3 i { color: #a855f7; }
+
+    .nl-input-row { display: flex; gap: 10px; }
+    .nl-input {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+      transition: border-color .18s;
+    }
+    .nl-input:focus { border-color: #a855f7; }
+    .nl-input::placeholder { color: var(--text-secondary); }
+
+    .btn-nl {
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity .18s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-nl:hover    { opacity: .85; }
+    .btn-nl:disabled { opacity: .4; cursor: not-allowed; }
+
+    .nl-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .nl-chip {
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid rgba(168,85,247,0.25);
+      background: rgba(168,85,247,0.06);
+      color: #c084fc;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all .18s;
+    }
+    .nl-chip:hover { background: rgba(168,85,247,0.16); border-color: #a855f7; }
+
+    .nl-result {
+      display: none;
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      line-height: 1.7;
+      animation: fadeUp .28s ease forwards;
+    }
+    .nl-result.show { display: block; }
+    .nl-result-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: #a855f7;
+      margin-bottom: 10px;
+    }
+    .nl-result-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .nl-result-table th {
+      text-align: left;
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text-secondary);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+    }
+    .nl-result-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+
+    /* ── Insights ── */
+    .section-head.ins { background: rgba(61,127,255,0.04); }
+    .section-head.ins h3 i { color: var(--accent); }
+
+    .btn-gen {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(61,127,255,0.3);
+      background: rgba(61,127,255,0.08);
+      color: var(--accent-light);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .18s;
+    }
+    .btn-gen:hover    { background: rgba(61,127,255,0.18); border-color: var(--accent); }
+    .btn-gen:disabled { opacity: .45; cursor: not-allowed; }
+
+    .insight-item {
+      display: flex;
+      gap: 12px;
+      padding: 13px 14px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      margin-bottom: 10px;
+      opacity: 0;
+      animation: fadeUp .35s ease forwards;
+    }
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(8px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .insight-icon {
+      width: 34px; height: 34px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+    .insight-icon.red    { background:rgba(239,68,68,.12);  color:#ef4444; }
+    .insight-icon.orange { background:rgba(249,115,22,.12); color:#f97316; }
+    .insight-icon.amber  { background:rgba(234,179,8,.12);  color:#eab308; }
+    .insight-icon.blue   { background:rgba(61,127,255,.12); color:var(--accent); }
+    .insight-icon.green  { background:rgba(16,217,126,.12); color:var(--risk-low); }
+    .insight-icon.purple { background:rgba(168,85,247,.12); color:#a855f7; }
+
+    .insight-text { flex:1; font-size:13px; line-height:1.65; }
+    .insight-text strong { color: var(--accent-light); }
+
+    .insights-placeholder {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--text-secondary);
+    }
+    .insights-placeholder i { font-size: 32px; opacity:.25; display:block; margin-bottom:12px; }
+    .insights-placeholder p { font-size:13px; }
+
+    .shimmer {
+      height: 58px; border-radius:10px; margin-bottom:10px;
+      background: linear-gradient(90deg,
+        rgba(255,255,255,.02) 25%,
+        rgba(255,255,255,.05) 50%,
+        rgba(255,255,255,.02) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+    }
+    @keyframes shimmer {
+      0%   { background-position:200% 0; }
+      100% { background-position:-200% 0; }
+    }
+
+    /* ── Chatbot ── */
+    .chat-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 520px;
+      position: static;
+    }
+    .chat-head {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(16,217,126,0.04);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .chat-avatar {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg,#10d97e,#059669);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; color: #fff; flex-shrink:0;
+    }
+    .chat-head-info h4 { font-size:14px; font-weight:600; font-family:var(--font-display); }
+    .chat-head-info p  {
+      font-size:11px; color:var(--risk-low);
+      display:flex; align-items:center; gap:5px;
+    }
+    .chat-head-info p::before {
+      content:''; width:6px; height:6px;
+      background:var(--risk-low); border-radius:50%; display:inline-block;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity:1; } 50% { opacity:.4; }
+    }
+
+    .chat-msgs {
+      flex:1; overflow-y:auto; padding:14px;
+      display:flex; flex-direction:column; gap:10px;
+      scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.07) transparent;
+    }
+    .chat-msgs::-webkit-scrollbar { width:3px; }
+    .chat-msgs::-webkit-scrollbar-thumb { background:rgba(255,255,255,.07); border-radius:2px; }
+
+    .msg { display:flex; gap:8px; }
+    .msg.user { flex-direction:row-reverse; }
+
+    .msg-av {
+      width:28px; height:28px; border-radius:8px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:12px; flex-shrink:0; margin-top:2px;
+    }
+    .msg.bot  .msg-av { background:linear-gradient(135deg,#10d97e,#059669); color:#fff; }
+    .msg.user .msg-av { background:rgba(61,127,255,.2); color:var(--accent-light); }
+
+    .msg-bub {
+      max-width:86%; padding:9px 13px; border-radius:12px;
+      font-size:13px; line-height:1.6;
+    }
+    .msg.bot  .msg-bub {
+      background:rgba(255,255,255,.04); border:1px solid var(--border);
+      color:var(--text-primary); border-top-left-radius:3px;
+    }
+    .msg.user .msg-bub {
+      background:rgba(61,127,255,.14); border:1px solid rgba(61,127,255,.22);
+      color:#dbeafe; border-top-right-radius:3px;
+    }
+    .msg-bub strong { color:var(--accent-light); }
+
+    .typing-ind { display:flex; align-items:center; gap:4px; padding:8px 12px; }
+    .t-dot {
+      width:7px; height:7px; border-radius:50%;
+      background:var(--text-secondary);
+      animation: tdot 1.2s infinite ease-in-out;
+    }
+    .t-dot:nth-child(2) { animation-delay:.2s; }
+    .t-dot:nth-child(3) { animation-delay:.4s; }
+    @keyframes tdot {
+      0%,80%,100% { transform:scale(.7); opacity:.4; }
+      40%          { transform:scale(1);  opacity:1;  }
+    }
+
+    .chat-suggest {
+      display:flex; flex-wrap:wrap; gap:6px;
+      padding:0 14px 10px;
+      flex-shrink: 0;
+    }
+    .sug-btn {
+      padding:4px 11px; border-radius:16px;
+      border:1px solid rgba(16,217,126,.2);
+      background:rgba(16,217,126,.06); color:#6ee7b7;
+      font-size:11px; cursor:pointer; transition:all .18s;
+    }
+    .sug-btn:hover { background:rgba(16,217,126,.16); border-color:var(--risk-low); }
+
+    .chat-foot {
+      padding:11px 14px; border-top:1px solid var(--border);
+      display:flex; gap:8px; flex-shrink: 0;
+    }
+    .chat-inp {
+      flex:1; background:rgba(255,255,255,.04);
+      border:1px solid var(--border-strong); border-radius:10px;
+      padding:9px 12px; color:var(--text-primary);
+      font-family:var(--font); font-size:13px;
+      outline:none; resize:none; height:40px;
+      transition:border-color .18s;
+    }
+    .chat-inp:focus { border-color:var(--risk-low); }
+    .chat-inp::placeholder { color:var(--text-secondary); }
+
+    .btn-send {
+      width:40px; height:40px; border-radius:10px;
+      border:none; background:linear-gradient(135deg,#10d97e,#059669);
+      color:#fff; font-size:14px; cursor:pointer;
+      transition:opacity .18s; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .btn-send:hover    { opacity:.85; }
+    .btn-send:disabled { opacity:.35; cursor:not-allowed; }
+
+    .err-msg { color:#ef4444; font-size:13px; padding:8px 0; }
+    .err-msg i { margin-right:6px; }
+
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <i class="fas fa-shield-alt"></i>
+      <span>VendorRisk</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item"><i class="fas fa-upload"></i><span>Upload</span></a>
+      <a href="/results" class="nav-item"><i class="fas fa-chart-line"></i><span>Dashboard</span></a>
+      <a href="/vendors" class="nav-item"><i class="fas fa-users"></i><span>Vendors</span></a>
+      <a href="/intelligence" class="nav-item active"><i class="fas fa-brain"></i><span>AI Intelligence</span></a>
+    </nav>
+    <div class="sidebar-footer"><span>SAP VRM v2.0</span></div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main-content">
+    <header class="page-header">
+      <div>
+        <h1 class="page-title">AI Intelligence</h1>
+        <p class="page-subtitle">Natural language queries, auto-generated insights &amp; vendor risk chatbot</p>
+      </div>
+      <div class="header-badge"><i class="fas fa-brain"></i> AI Powered</div>
+    </header>
+
+    <!-- Single column — 3 cards stacked vertically -->
+    <div class="intel-grid">
+
+      <!-- Card 1: NL Query -->
+      <div class="intel-section">
+        <div class="section-head nl">
+          <div>
+            <h3><i class="fas fa-search"></i> Natural Language Query</h3>
+            <p>Ask anything about your vendor data — no SQL needed.</p>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="nl-input-row">
+            <input type="text" id="nlInput" class="nl-input"
+              placeholder="e.g. Which vendors have invoices overdue more than 90 days?" />
+            <button class="btn-nl" id="nlBtn" onclick="runNLQuery()">
+              <i class="fas fa-bolt"></i> Query
+            </button>
+          </div>
+          <div class="nl-chips">
+            <span class="nl-chip" onclick="quickQuery(this)">Vendors overdue 90+ days</span>
+            <span class="nl-chip" onclick="quickQuery(this)">Total overdue by risk level</span>
+            <span class="nl-chip" onclick="quickQuery(this)">Top 5 highest risk vendors</span>
+            <span class="nl-chip" onclick="quickQuery(this)">Average days overdue per category</span>
+            <span class="nl-chip" onclick="quickQuery(this)">Critical vendors count and exposure</span>
+            <span class="nl-chip" onclick="quickQuery(this)">Vendors with most invoices</span>
+          </div>
+          <div id="nlResult" class="nl-result"></div>
+        </div>
+      </div>
+
+      <!-- Card 2: AI Insights -->
+      <div class="intel-section">
+        <div class="section-head ins">
+          <div>
+            <h3><i class="fas fa-lightbulb"></i> AI-Generated Insights</h3>
+            <p>CFO-ready analysis of your vendor risk portfolio.</p>
+          </div>
+          <button class="btn-gen" id="insightBtn" onclick="generateInsights()">
+            <i class="fas fa-sparkles"></i> Generate
+          </button>
+        </div>
+        <div class="section-body" id="insightsBody">
+          <div class="insights-placeholder" id="insightsEmpty">
+            <i class="fas fa-lightbulb"></i>
+            <p>Click <strong>Generate</strong> to have AI analyse your portfolio and surface key risk insights.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Chatbot -->
+      <div class="chat-panel">
+        <div class="chat-head">
+          <div class="chat-avatar"><i class="fas fa-robot"></i></div>
+          <div class="chat-head-info">
+            <h4>VendorRisk Assistant</h4>
+            <p>Online &amp; ready</p>
+          </div>
+        </div>
+        <div class="chat-msgs" id="chatMsgs"></div>
+        <div class="chat-suggest" id="chatSuggest"></div>
+        <div class="chat-foot">
+          <textarea class="chat-inp" id="chatInp" placeholder="Ask about vendor risk…" rows="1"></textarea>
+          <button class="btn-send" id="sendBtn" onclick="sendChat()" title="Send">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>const RAW_DATA = {{ data | safe }};</script>
+  <script src="{{ url_for('static', filename='js/intelligence.js') }}"></script>
+</body>
+</html>

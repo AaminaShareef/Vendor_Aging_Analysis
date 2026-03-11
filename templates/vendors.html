@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vendor Table – SAP Vendor Risk Monitoring</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <i class="fas fa-shield-alt"></i>
+            <span>VendorRisk</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/" class="nav-item"><i class="fas fa-upload"></i><span>Upload</span></a>
+            <a href="/results" class="nav-item"><i class="fas fa-chart-line"></i><span>Dashboard</span></a>
+            <a href="/vendors" class="nav-item active"><i class="fas fa-users"></i><span>Vendors</span></a>
+            <a href="/intelligence" class="nav-item"><i class="fas fa-brain"></i><span>AI Intelligence</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <span>SAP VRM v2.0</span>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+        <header class="page-header">
+            <div>
+                <h1 class="page-title">Vendor Risk Table</h1>
+                <p class="page-subtitle">Complete listing of all vendors with ML risk assessment</p>
+            </div>
+            <div class="header-actions">
+                <a href="/results" class="btn-secondary"><i class="fas fa-chart-line"></i> Dashboard</a>
+                <a href="/" class="btn-secondary"><i class="fas fa-plus-circle"></i> New Analysis</a>
+            </div>
+        </header>
+
+        <!-- Session expired banner (shown via JS if ?msg=expired) -->
+        <div class="alert-banner alert-warning" id="sessionBanner" style="display:none">
+            <i class="fas fa-clock"></i>
+            <span id="sessionBannerMsg"></span>
+            <button onclick="document.getElementById('sessionBanner').style.display='none'"><i class="fas fa-times"></i></button>
+        </div>
+
+        <!-- Controls -->
+        <div class="table-controls">
+            <div class="table-search">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" placeholder="Search by vendor ID, name, or risk level..." />
+            </div>
+            <div class="filter-pills" id="filterPills">
+                <button class="pill active" data-filter="all">All</button>
+                <button class="pill pill-low" data-filter="Low">Low</button>
+                <button class="pill pill-medium" data-filter="Medium">Medium</button>
+                <button class="pill pill-high" data-filter="High">High</button>
+                <button class="pill pill-critical" data-filter="Critical">Critical</button>
+            </div>
+            <div class="table-info">
+                <span id="recordCount">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Export Bar -->
+        <div class="export-bar">
+            <span class="export-label"><i class="fas fa-download"></i> Export CSV</span>
+            <div class="export-buttons">
+                <button class="export-btn export-all"      onclick="exportCSV('all')">
+                    <i class="fas fa-table"></i> All Vendors
+                </button>
+                <button class="export-btn export-critical" onclick="exportCSV('Critical')">
+                    <i class="fas fa-radiation"></i> Critical
+                </button>
+                <button class="export-btn export-high"     onclick="exportCSV('High')">
+                    <i class="fas fa-exclamation-triangle"></i> High
+                </button>
+                <button class="export-btn export-medium"   onclick="exportCSV('Medium')">
+                    <i class="fas fa-minus-circle"></i> Medium
+                </button>
+                <button class="export-btn export-low"      onclick="exportCSV('Low')">
+                    <i class="fas fa-check-circle"></i> Low
+                </button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+            <div class="table-wrapper">
+                <table class="data-table" id="vendorTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-col="vendor_id">Vendor ID <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-col="vendor_name">Vendor Name <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-col="total_invoices">Invoices <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-col="overdue_amount">Overdue Amount <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-col="max_days_overdue">Max Days OD <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-col="avg_days_overdue">Avg Days OD <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-col="risk_score">Risk Score <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-col="predicted_risk">Risk Level <i class="fas fa-sort"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="vendorBody"></tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination">
+                <button id="prevBtn" class="pg-btn"><i class="fas fa-chevron-left"></i></button>
+                <div id="pageNumbers" class="page-numbers"></div>
+                <button id="nextBtn" class="pg-btn"><i class="fas fa-chevron-right"></i></button>
+                <span class="pg-info" id="pgInfo"></span>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend-row">
+            <span class="legend-item"><span class="legend-dot critical"></span> Critical – immediate action required</span>
+            <span class="legend-item"><span class="legend-dot high"></span> High – monitor closely</span>
+            <span class="legend-item"><span class="legend-dot medium"></span> Medium – review periodically</span>
+            <span class="legend-item"><span class="legend-dot low"></span> Low – minimal risk</span>
+            <span class="legend-item" style="margin-left:auto; color:#64748b; font-size:11px;">
+                <i class="fas fa-info-circle"></i> Risk Score: 0–100 ML-computed composite score
+            </span>
+        </div>
+    </main>
+
+    <script>
+        const RAW_DATA = {{ data | safe }};
+    </script>
+    <script src="{{ url_for('static', filename='js/vendors.js') }}"></script>
+
+    <style>
+        /* ── Export bar ─────────────────────────────────────────────────────── */
+        .export-bar {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            background: rgba(30,41,59,0.7);
+            border: 1px solid rgba(148,163,184,0.1);
+            border-radius: 12px;
+            padding: 10px 16px;
+            margin-bottom: 14px;
+        }
+        .export-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: #64748b;
+            white-space: nowrap;
+        }
+        .export-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .export-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 14px;
+            border-radius: 8px;
+            border: 1.5px solid rgba(148,163,184,0.2);
+            background: transparent;
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all .18s;
+        }
+        .export-btn:hover         { color: #f1f5f9; border-color: currentColor; }
+        .export-all:hover         { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.1); }
+        .export-critical:hover    { border-color: #ef4444; color: #fca5a5; background: rgba(239,68,68,0.1); }
+        .export-high:hover        { border-color: #f97316; color: #fdba74; background: rgba(249,115,22,0.1); }
+        .export-medium:hover      { border-color: #eab308; color: #fde047; background: rgba(234,179,8,0.1); }
+        .export-low:hover         { border-color: #22c55e; color: #86efac; background: rgba(34,197,94,0.1); }
+
+        /* ── Alert banner ───────────────────────────────────────────────────── */
+        .alert-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        .alert-warning {
+            background: rgba(234,179,8,0.12);
+            border: 1px solid rgba(234,179,8,0.3);
+            color: #fde047;
+        }
+        .alert-banner button {
+            margin-left: auto;
+            background: transparent;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            opacity: .6;
+        }
+        .alert-banner button:hover { opacity: 1; }
+
+        /* ── New Analysis btn ───────────────────────────────────────────────── */
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border-radius: 9px;
+            border: 1px solid rgba(148,163,184,0.2);
+            background: transparent;
+            color: #94a3b8;
+            font-size: 13px;
+            text-decoration: none;
+            transition: all .18s;
+        }
+        .btn-secondary:hover {
+            background: rgba(99,102,241,0.1);
+            color: #a5b4fc;
+            border-color: #6366f1;
+        }
+    </style>
+</body>
+</html>

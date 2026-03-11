@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Risk Dashboard – SAP Vendor Risk Monitoring</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <i class="fas fa-shield-alt"></i>
+            <span>VendorRisk</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/" class="nav-item"><i class="fas fa-upload"></i><span>Upload</span></a>
+            <a href="/results" class="nav-item active"><i class="fas fa-chart-line"></i><span>Dashboard</span></a>
+            <a href="/vendors" class="nav-item"><i class="fas fa-users"></i><span>Vendors</span></a>
+            <a href="/intelligence" class="nav-item"><i class="fas fa-brain"></i><span>AI Intelligence</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <span>SAP VRM v2.0</span>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+        <header class="page-header">
+            <div>
+                <h1 class="page-title">Risk Dashboard</h1>
+                <p class="page-subtitle">Vendor risk analysis results &amp; ML-powered insights</p>
+            </div>
+        
+        </header>
+
+        <!-- KPI Cards -->
+        <section class="kpi-grid" id="kpiGrid">
+            <div class="kpi-card kpi-blue">
+                <div class="kpi-icon"><i class="fas fa-users"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-label">Total Vendors</span>
+                    <span class="kpi-value" id="kpiTotalVendors">—</span>
+                </div>
+            </div>
+            <div class="kpi-card kpi-amber">
+                <div class="kpi-icon"><i class="fas fa-rupee-sign"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-label">Total Overdue Amount</span>
+                    <span class="kpi-value" id="kpiOverdue">—</span>
+                </div>
+            </div>
+            <div class="kpi-card kpi-orange">
+                <div class="kpi-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-label">High Risk Vendors</span>
+                    <span class="kpi-value" id="kpiHighRisk">—</span>
+                </div>
+            </div>
+            <div class="kpi-card kpi-red">
+                <div class="kpi-icon"><i class="fas fa-radiation"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-label">Critical Vendors</span>
+                    <span class="kpi-value" id="kpiCritical">—</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Row 1 -->
+        <div class="chart-grid-2">
+            <div class="chart-card">
+                <div class="chart-card-header">
+                    <h3><i class="fas fa-chart-bar"></i> Aging Bucket Analysis</h3>
+                    <span class="chart-subtitle">Overdue amount by days overdue</span>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="agingChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-card-header">
+                    <h3><i class="fas fa-chart-pie"></i> Risk Distribution</h3>
+                    <span class="chart-subtitle">Vendor count by risk level</span>
+                </div>
+                <div class="chart-wrap chart-wrap-pie">
+                    <canvas id="riskPieChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="chart-grid-2">
+            <div class="chart-card">
+                <div class="chart-card-header">
+                    <h3><i class="fas fa-sort-amount-down"></i> Top 10 High-Risk Vendors</h3>
+                    <span class="chart-subtitle">By Risk Score</span>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="top10Chart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-card-header">
+                    <h3><i class="fas fa-braille"></i> Risk Score vs Overdue Amount</h3>
+                    <span class="chart-subtitle">Each point = one vendor</span>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="scatterChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Vendor Preview -->
+        <div class="card mt-4">
+            <div class="card-header-flex">
+                <h3><i class="fas fa-list"></i> Top Risk Vendors Preview</h3>
+                <a href="/vendors" class="btn-link">View All Vendors <i class="fas fa-arrow-right"></i></a>
+            </div>
+            <div class="table-wrapper">
+                <table class="data-table" id="previewTable">
+                    <thead>
+                        <tr>
+                            <th>Vendor ID</th>
+                            <th>Vendor Name</th>
+                            <th>Overdue Amount</th>
+                            <th>Risk Score</th>
+                            <th>Risk Level</th>
+                        </tr>
+                    </thead>
+                    <tbody id="previewBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const RAW_DATA = {{ data | safe }};
+    </script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

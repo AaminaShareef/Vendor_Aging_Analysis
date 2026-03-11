@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SAP Vendor Risk Monitoring System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body class="upload-body">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <i class="fas fa-shield-alt"></i>
+      <span>VendorRisk</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item active"><i class="fas fa-upload"></i><span>Upload</span></a>
+      <a href="/results" class="nav-item" id="nav-dashboard"><i class="fas fa-chart-line"></i><span>Dashboard</span></a>
+      <a href="/vendors" class="nav-item" id="nav-vendors"><i class="fas fa-users"></i><span>Vendors</span></a>
+      <a href="/intelligence" class="nav-item" id="nav-intel"><i class="fas fa-brain"></i><span>AI Intelligence</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <span>SAP VRM v2.0</span>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="page-header">
+      <div>
+        <h1 class="page-title">Vendor Risk Analysis</h1>
+        <p class="page-subtitle">Upload SAP Accounts Payable data to begin ML-powered risk assessment</p>
+      </div>
+      <div class="header-badge">
+        <i class="fas fa-database"></i> SAP AP Module
+      </div>
+    </header>
+
+    <!-- Session / expiry banner -->
+    <div class="alert-banner alert-warning" id="sessionBanner" style="display:none">
+      <i class="fas fa-clock"></i>
+      <span id="sessionBannerMsg"></span>
+      <button onclick="document.getElementById('sessionBanner').style.display='none'"><i class="fas fa-times"></i></button>
+    </div>
+
+    <!-- Upload Zone -->
+    <div class="upload-container">
+      <div class="upload-hero">
+        <div class="upload-hero-icon">
+          <i class="fas fa-file-csv"></i>
+        </div>
+        <h2>SAP Data Upload</h2>
+        <p>Upload the three required SAP Accounts Payable CSV files to run the vendor risk analysis pipeline using K-Means clustering with centroid-distance risk scoring.</p>
+      </div>
+
+      <!-- Hidden file inputs (outside label to avoid browser quirks) -->
+      <input type="file" name="bsik_file" id="bsik_file" accept=".csv" style="display:none"/>
+      <input type="file" name="lfa1_file" id="lfa1_file" accept=".csv" style="display:none"/>
+      <input type="file" name="lfb1_file" id="lfb1_file" accept=".csv" style="display:none"/>
+
+      <div class="file-upload-grid">
+
+        <!-- BSIK -->
+        <div class="file-card" id="card-bsik">
+          <div class="file-card-header">
+            <div class="file-icon bsik">
+              <i class="fas fa-file-invoice-dollar"></i>
+            </div>
+            <div>
+              <h3>Open Items</h3>
+              <p class="file-desc">BSIK_Open_Items.csv</p>
+            </div>
+          </div>
+          <p class="file-info">Contains open payable items with document date, due date, and invoice amounts for aging analysis.</p>
+          <div class="file-drop-zone" id="drop-bsik">
+            <div class="drop-content" id="drop-content-bsik">
+              <i class="fas fa-cloud-upload-alt"></i>
+              <span>Click to browse or drag &amp; drop</span>
+              <small>CSV files only</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- LFA1 -->
+        <div class="file-card" id="card-lfa1">
+          <div class="file-card-header">
+            <div class="file-icon lfa1">
+              <i class="fas fa-building"></i>
+            </div>
+            <div>
+              <h3>Vendor Master General</h3>
+              <p class="file-desc">LFA1_Vendor_Master_General.csv</p>
+            </div>
+          </div>
+          <p class="file-info">General vendor master data including name, country, city, and account group information.</p>
+          <div class="file-drop-zone" id="drop-lfa1">
+            <div class="drop-content" id="drop-content-lfa1">
+              <i class="fas fa-cloud-upload-alt"></i>
+              <span>Click to browse or drag &amp; drop</span>
+              <small>CSV files only</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- LFB1 -->
+        <div class="file-card" id="card-lfb1">
+          <div class="file-card-header">
+            <div class="file-icon lfb1">
+              <i class="fas fa-sitemap"></i>
+            </div>
+            <div>
+              <h3>Vendor Master CompCode</h3>
+              <p class="file-desc">LFB1_Vendor_Master_CompCode.csv</p>
+            </div>
+          </div>
+          <p class="file-info">Company code specific vendor data including reconciliation accounts and payment terms.</p>
+          <div class="file-drop-zone" id="drop-lfb1">
+            <div class="drop-content" id="drop-content-lfb1">
+              <i class="fas fa-cloud-upload-alt"></i>
+              <span>Click to browse or drag &amp; drop</span>
+              <small>CSV files only</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Run Button -->
+      <div class="run-section">
+        <button type="button" class="btn-run" id="runBtn">
+          <i class="fas fa-play-circle"></i>
+          <span>Run Vendor Risk Analysis</span>
+        </button>
+        <p class="run-hint" id="runHint">All three CSV files must be uploaded before analysis can begin.</p>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-overlay" id="progressOverlay" style="display:none">
+        <div class="progress-box">
+          <div class="spinner"></div>
+          <h3>Analysing Vendor Risk...</h3>
+          <p id="progressMsg">Loading SAP data files...</p>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div class="error-banner" id="errorBanner" style="display:none">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span id="errorMsg"></span>
+        <button onclick="document.getElementById('errorBanner').style.display='none'"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="info-grid">
+      <div class="info-card">
+        <i class="fas fa-brain"></i>
+        <h4>ML-Powered Analysis</h4>
+        <p>Uses K-Means clustering across seven financial risk dimensions, with centroid-distance interpolation to produce a continuous 0–100 risk score for every vendor.</p>
+      </div>
+      <div class="info-card">
+        <i class="fas fa-clock"></i>
+        <h4>Aging Analysis</h4>
+        <p>Automatically categorises overdue invoices into buckets: 0–30, 31–60, 61–90, 91–120, and 120+ days.</p>
+      </div>
+      <div class="info-card">
+        <i class="fas fa-chart-pie"></i>
+        <h4>Risk Classification</h4>
+        <p>Vendors classified as Low, Medium, High, or Critical risk based on composite scoring algorithms.</p>
+      </div>
+      <div class="info-card">
+        <i class="fas fa-download"></i>
+        <h4>Export Results</h4>
+        <p>Download the complete risk assessment report as a CSV file for further analysis and reporting.</p>
+      </div>
+      <div class="info-card info-card-sample">
+        <i class="fas fa-flask"></i>
+        <h4>Sample Data</h4>
+        <p>Don't have SAP data handy? Download sample CSV files to explore the system.</p>
+        <div class="sample-links">
+          <button class="sample-btn" onclick="downloadSample('bsik')"><i class="fas fa-file-csv"></i> BSIK_Open_Items.csv</button>
+          <button class="sample-btn" onclick="downloadSample('lfa1')"><i class="fas fa-file-csv"></i> LFA1_Vendor_Master_General.csv</button>
+          <button class="sample-btn" onclick="downloadSample('lfb1')"><i class="fas fa-file-csv"></i> LFB1_Vendor_Master_CompCode.csv</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+  <script>
+    /* ── Session banner ──────────────────────────────────────────────────── */
+    (function() {
+      const params  = new URLSearchParams(window.location.search);
+      const msg     = params.get("msg");
+      const banner  = document.getElementById("sessionBanner");
+      const msgEl   = document.getElementById("sessionBannerMsg");
+      const msgs    = {
+        expired   : "Your previous analysis session expired (results are stored for 24 hours). Please re-upload your files.",
+        no_session: "No active session found. Please upload your SAP AP files to begin a new analysis.",
+      };
+      if (msg && msgs[msg] && banner) {
+        msgEl.textContent = msgs[msg];
+        banner.style.display = "flex";
+        /* clean URL without reloading */
+        history.replaceState(null, "", window.location.pathname);
+      }
+    })();
+
+    /* ── Sample CSV generator ────────────────────────────────────────────── */
+    function downloadSample(table) {
+      const samples = {
+        bsik: {
+          filename: "BSIK_Open_Items.csv",
+          content: [
+            "LIFNR,BLDAT,ZFBDT,DMBTR",
+            "V000001,2022-01-15,2022-02-14,45000.00",
+            "V000001,2022-03-10,2022-04-09,32000.50",
+            "V000002,2022-02-01,2022-03-03,125000.00",
+            "V000002,2022-05-20,2022-06-19,87500.75",
+            "V000003,2021-11-05,2021-12-05,210000.00",
+            "V000003,2022-01-22,2022-02-21,63000.00",
+            "V000004,2022-06-01,2022-06-30,9800.00",
+            "V000005,2022-04-15,2022-05-15,320000.00",
+          ].join("\n"),
+        },
+        lfa1: {
+          filename: "LFA1_Vendor_Master_General.csv",
+          content: [
+            "LIFNR,NAME1,LAND1,ORT01",
+            "V000001,Prime Associates,IN,Mumbai",
+            "V000002,Digital GmbH,DE,Berlin",
+            "V000003,Smart Inc,US,New York",
+            "V000004,Agro Ltd,IN,Chennai",
+            "V000005,Beta Services,GB,London",
+          ].join("\n"),
+        },
+        lfb1: {
+          filename: "LFB1_Vendor_Master_CompCode.csv",
+          content: [
+            "LIFNR,BUKRS,ZTERM",
+            "V000001,1000,NT30",
+            "V000002,1000,NT60",
+            "V000003,2000,NT30",
+            "V000004,1000,NT15",
+            "V000005,2000,NT45",
+          ].join("\n"),
+        },
+      };
+      const s    = samples[table];
+      const blob = new Blob([s.content], { type: "text/csv;charset=utf-8;" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = s.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+
+  <style>
+    .alert-banner {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; border-radius: 10px;
+      margin-bottom: 16px; font-size: 13px;
+    }
+    .alert-warning {
+      background: rgba(234,179,8,0.12);
+      border: 1px solid rgba(234,179,8,0.3);
+      color: #fde047;
+    }
+    .alert-banner button {
+      margin-left: auto; background: transparent;
+      border: none; color: inherit; cursor: pointer; opacity: .6;
+    }
+    .alert-banner button:hover { opacity: 1; }
+    .info-card-sample { grid-column: span 2; }
+    .sample-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .sample-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 8px;
+      border: 1px solid rgba(148,163,184,0.2);
+      background: rgba(99,102,241,0.08);
+      color: #a5b4fc; font-size: 12px; cursor: pointer;
+      transition: all .18s;
+    }
+    .sample-btn:hover {
+      background: rgba(99,102,241,0.18);
+      border-color: #6366f1;
+    }
+  </style>
+</body>
+</html>
