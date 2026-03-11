@@ -200,24 +200,23 @@ function renderKPIs(vendors) {
    With AGING_REFERENCE_DATE set in ml_model.py these populate correctly.
    ═══════════════════════════════════════════════════════════════════════════ */
 function renderAgingChart(vendors) {
-  const buckets = { "0-30": 0, "31-60": 0, "61-90": 0, "91-120": 0, "120+": 0 };
-  vendors.forEach(v => {
-    const d = v.avg_days_overdue;
-    const bucket = d <= 30  ? "0-30"   :
-                   d <= 60  ? "31-60"  :
-                   d <= 90  ? "61-90"  :
-                   d <= 120 ? "91-120" : "120+";
-    buckets[bucket] += v.overdue_amount;
-  });
+  const BUCKET_KEYS = ["0-30", "31-60", "61-90", "91-120", "120+"];
 
-  const labels = Object.keys(buckets);
-  const values = Object.values(buckets);
+  // Use invoice-level bucket totals from the backend (accurate per-invoice aging)
+  const rawBuckets = DATA.aging_buckets || {};
+
+  // Scale proportionally when filters are active
+  const allOverdue      = VENDORS.reduce((s, v) => s + v.overdue_amount, 0);
+  const filteredOverdue = vendors.reduce((s, v) => s + v.overdue_amount, 0);
+  const scale = allOverdue > 0 ? filteredOverdue / allOverdue : 1;
+
+  const values = BUCKET_KEYS.map(k => (rawBuckets[k] || 0) * scale);
 
   destroyChart(agingChart);
   agingChart = new Chart(document.getElementById("agingChart"), {
     type: "bar",
     data: {
-      labels,
+      labels: BUCKET_KEYS,
       datasets: [{
         label: "Overdue Amount",
         data: values,
@@ -226,8 +225,53 @@ function renderAgingChart(vendors) {
         borderSkipped: false,
       }]
     },
-    options: chartOpts("Overdue Amount (₹)", true),
+    options: agingChartOpts(values),
   });
+}
+
+function agingChartOpts(values) {
+  // Use log scale when max bucket is 50x+ the smallest non-zero bucket
+  const nonZero = values.filter(v => v > 0);
+  const useLog  = nonZero.length > 1 && (Math.max(...nonZero) / Math.min(...nonZero)) > 50;
+
+  return {
+    responsive        : true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend : { display: false },
+      tooltip: {
+        callbacks: { label: ctx => " Overdue: " + fmtCurrency(ctx.raw) }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: "#94a3b8" },
+        grid : { display: false },
+      },
+      y: {
+        type : useLog ? "logarithmic" : "linear",
+        min  : useLog ? undefined : 0,
+        ticks: {
+          color        : "#94a3b8",
+          maxTicksLimit: useLog ? 8 : 6,
+          callback: v => {
+            if (useLog) {
+              const log = Math.log10(v);
+              if (Math.abs(log - Math.round(log)) > 0.01) return null;
+            }
+            return fmtCurrencyShort(v);
+          },
+        },
+        grid : { color: "rgba(255,255,255,0.06)" },
+        title: {
+          display: true,
+          text   : useLog ? "Overdue Amount (₹)  —  log scale" : "Overdue Amount (₹)",
+          color  : "#94a3b8",
+          font   : { size: 11 },
+        },
+      }
+    }
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

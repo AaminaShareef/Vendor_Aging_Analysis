@@ -338,6 +338,108 @@ def _build_result(vendor_df: pd.DataFrame, bsik: pd.DataFrame) -> dict:
         .to_dict(orient="records")
     )
 
+    # ── AI context: richer data for the intelligence features ──────────────
+    # Country breakdown (from LFA1 LAND1 column if present)
+    country_dist = {}
+    if "LAND1" in vendor_df.columns:
+        country_dist = (
+            vendor_df.groupby("LAND1")["TOTAL_OVERDUE_AMOUNT"]
+            .sum()
+            .sort_values(ascending=False)
+            .head(10)
+            .round(2)
+            .to_dict()
+        )
+
+    # Payment terms breakdown (from LFB1 ZTERM column if present)
+    zterm_dist = {}
+    if "ZTERM" in vendor_df.columns:
+        zterm_dist = (
+            vendor_df["ZTERM"]
+            .fillna("Unknown")
+            .value_counts()
+            .head(10)
+            .to_dict()
+        )
+
+    # Company code breakdown
+    bukrs_dist = {}
+    if "BUKRS" in vendor_df.columns:
+        bukrs_dist = (
+            vendor_df.groupby("BUKRS")["TOTAL_OVERDUE_AMOUNT"]
+            .sum()
+            .sort_values(ascending=False)
+            .round(2)
+            .to_dict()
+        )
+
+    # Invoice-level aging sample: top 50 most overdue invoices (raw transactions)
+    invoice_sample_cols = ["LIFNR", "DMBTR", "DAYS_OVERDUE", "AGING_BUCKET"]
+    if "BLDAT" in bsik.columns:
+        invoice_sample_cols.append("BLDAT")
+    if "ZFBDT" in bsik.columns:
+        invoice_sample_cols.append("ZFBDT")
+    invoice_sample = (
+        bsik[invoice_sample_cols]
+        .nlargest(50, "DAYS_OVERDUE")
+        .rename(columns={
+            "LIFNR": "vendor_id",
+            "DMBTR": "amount",
+            "DAYS_OVERDUE": "days_overdue",
+            "AGING_BUCKET": "aging_bucket",
+            "BLDAT": "doc_date",
+            "ZFBDT": "due_date",
+        })
+        .to_dict(orient="records")
+    )
+    # Stringify dates so they are JSON-serialisable
+    for row in invoice_sample:
+        for k in ("doc_date", "due_date"):
+            if k in row and hasattr(row[k], "strftime"):
+                row[k] = row[k].strftime("%Y-%m-%d")
+
+    # Full vendor list for AI (all vendors, slim columns)
+    all_vendors_ai_cols = [
+        "LIFNR", "NAME1",
+        "TOTAL_OVERDUE_AMOUNT", "TOTAL_INVOICES",
+        "MAX_DAYS_OVERDUE", "AVG_DAYS_OVERDUE",
+        "PCT_CRITICAL_INVOICES",
+        "RISK_SCORE", "PREDICTED_RISK",
+    ]
+    # Optionally include country/payment-terms if available
+    for extra in ("LAND1", "ZTERM", "BUKRS", "ORT01"):
+        if extra in vendor_df.columns:
+            all_vendors_ai_cols.append(extra)
+
+    all_vendors_ai = (
+        vendor_df[all_vendors_ai_cols]
+        .rename(columns=_rename)
+        .sort_values("risk_score", ascending=False)
+        .to_dict(orient="records")
+    )
+
+    # Aggregate per-bucket totals (already in `aging`, just formatted)
+    aging_amounts = {k: round(float(v), 2) for k, v in aging.items()}
+
+    # Per-risk-level overdue totals
+    risk_overdue = (
+        vendor_df.groupby("PREDICTED_RISK")["TOTAL_OVERDUE_AMOUNT"]
+        .sum()
+        .round(2)
+        .to_dict()
+    )
+
+    ai_context = {
+        "total_invoices_processed": int(len(bsik)),
+        "aging_amounts":            aging_amounts,
+        "risk_overdue_totals":      risk_overdue,
+        "country_distribution":     country_dist,
+        "payment_terms_distribution": zterm_dist,
+        "company_code_distribution":  bukrs_dist,
+        "top50_most_overdue_invoices": invoice_sample,
+        "all_vendors":              all_vendors_ai,
+    }
+
     return {
         "kpi": {
             "total_vendors": total_vendors,
@@ -350,4 +452,5 @@ def _build_result(vendor_df: pd.DataFrame, bsik: pd.DataFrame) -> dict:
         "top10":             top10,
         "scatter":           scatter,
         "vendors":           vendors,
+        "ai_context":        ai_context,
     }

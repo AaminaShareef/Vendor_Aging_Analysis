@@ -168,7 +168,7 @@ Rules:
 - Currency in Indian format: use Cr for crores, L for lakhs, prefix with rupee symbol.
 - Be concise. State how many records match when listing vendors.`;
 
-  return await callAI([{ role: "user", content: query }], system, 600);
+  return await callAI([{ role: "user", content: query }], system, 1000);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -269,7 +269,7 @@ window.sendChat = async function() {
   if (chatHistory.length > 18) chatHistory = chatHistory.slice(-14);
 
   try {
-    const raw   = await callAI(chatHistory, chatSystem(), 500);
+    const raw   = await callAI(chatHistory, chatSystem(), 1200);
     const reply = renderMarkdown(raw);
     removeTyping();
     addBot(reply);
@@ -292,7 +292,9 @@ ${buildSnapshot(25)}
 Rules:
 - Reply using plain text with markdown formatting ONLY: **bold**, bullet lists with "- item", numbered lists with "1. item".
 - Do NOT use HTML tags in your response.
-- Keep replies under 160 words unless a detailed list is needed.
+- CRITICAL: Always complete your response fully. Never stop mid-sentence or mid-list. If listing vendors, finish the entire list.
+- If a list would be very long, limit yourself to the top 5 items and say "(showing top 5)" — but always end with a complete sentence.
+- Keep replies under 200 words unless a detailed list is needed; detailed lists may go up to 350 words.
 - Use short sections with a bold heading then bullets below it.
 - Currency in Indian rupee format (Cr, L).
 - Always give a short actionable recommendation at the end.`;
@@ -387,49 +389,201 @@ async function callAI(messages, systemPrompt, maxTokens) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   DATA SNAPSHOT  (capped to avoid token overflow)
+   DATA SNAPSHOT  – uses ai_context when available for richer, more accurate
+   AI responses; falls back to the legacy KPI/vendor table otherwise.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Top-level ai_context alias (populated by Flask if ml_model >= v2) */
+const AI_CTX = RAW_DATA.ai_context || null;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COMPUTED AGGREGATES — single source of truth, mirrors dashboard.js exactly
+   All numbers are derived from the same VENDORS array the dashboard uses,
+   so the chatbot and charts are guaranteed to match.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const _AGG = (function() {
+  var totalOverdue = 0, highRisk = 0, critical = 0;
+  var riskOverdue  = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+  var riskCount    = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+
+  VENDORS.forEach(function(v) {
+    var amt = Number(v.overdue_amount) || 0;
+    totalOverdue += amt;
+    if (v.predicted_risk === "High")     { highRisk++; }
+    if (v.predicted_risk === "Critical") { critical++;  }
+    if (riskOverdue[v.predicted_risk] !== undefined) {
+      riskOverdue[v.predicted_risk] += amt;
+      riskCount[v.predicted_risk]++;
+    }
+  });
+
+  // Top 10 by overdue amount — same sort as dashboard Top-10 chart
+  var top10ByOverdue = VENDORS.slice()
+    .sort(function(a, b) { return b.overdue_amount - a.overdue_amount; })
+    .slice(0, 10);
+
+  // Top 10 by risk score — same sort as dashboard preview table
+  var top10ByScore = VENDORS.slice()
+    .sort(function(a, b) { return b.risk_score - a.risk_score; })
+    .slice(0, 10);
+
+  // Aging buckets — use backend invoice-level data (same source as chart)
+  var aging = RAW_DATA.aging_buckets || {};
+
+  return {
+    totalVendors : VENDORS.length,
+    totalOverdue : totalOverdue,
+    highRisk     : highRisk,
+    critical     : critical,
+    riskOverdue  : riskOverdue,
+    riskCount    : riskCount,
+    top10ByOverdue: top10ByOverdue,
+    top10ByScore  : top10ByScore,
+    aging         : aging,
+  };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   buildSnapshot() — feeds every AI call with a full, consistent data view.
+   The "maxVendors" param is kept for backwards compat but the full vendor
+   list is always sent in a compact pipe-delimited format.
    ═══════════════════════════════════════════════════════════════════════════ */
 function buildSnapshot(maxVendors) {
-  maxVendors = maxVendors || 40;
 
-  const aging = Object.entries(AGING_BUCKETS)
-    .map(function(e) { return "  " + e[0] + " days: " + fmt(e[1]); }).join("\n");
+  /* ── KPIs (computed from VENDORS, same as dashboard) ────────────────────── */
+  const kpiBlock =
+    "=== KPIs (matches dashboard exactly) ===\n"
+    + "Total vendors          : " + _AGG.totalVendors + "\n"
+    + "Total overdue exposure : " + fmt(_AGG.totalOverdue) + "\n"
+    + "High risk vendors      : " + _AGG.highRisk + "\n"
+    + "Critical vendors       : " + _AGG.critical + "\n";
 
-  const dist = Object.entries(RISK_DIST)
-    .map(function(e) { return "  " + e[0] + ": " + e[1] + " vendors"; }).join("\n");
+  /* ── Aging buckets (invoice-level from backend, same as aging chart) ──────── */
+  const BUCKET_KEYS = ["0-30", "31-60", "61-90", "91-120", "120+"];
+  const agingBlock =
+    "=== Invoice Aging Buckets (per-invoice amounts — matches Aging chart) ===\n"
+    + BUCKET_KEYS.map(function(k) {
+        return "  " + k + " days: " + fmt(_AGG.aging[k] || 0);
+      }).join("\n");
 
-  const top = TOP10.slice(0, 10).map(function(v, i) {
-    return "  " + (i+1) + ". " + v.vendor_name + " (" + v.vendor_id + ")"
-      + " | Score:" + v.risk_score.toFixed(1)
-      + " | Overdue:" + fmt(v.overdue_amount)
-      + " | " + v.predicted_risk;
+  /* ── Risk distribution (vendor counts — matches pie chart) ──────────────── */
+  const distBlock =
+    "=== Risk Distribution (vendor count — matches Risk Pie chart) ===\n"
+    + ["Critical","High","Medium","Low"].map(function(r) {
+        return "  " + r + ": " + (_AGG.riskCount[r] || 0) + " vendors";
+      }).join("\n");
+
+  /* ── Per-risk overdue totals (computed from VENDORS) ────────────────────── */
+  const riskOverdueBlock =
+    "\n=== Overdue Exposure by Risk Level ===\n"
+    + ["Critical","High","Medium","Low"].map(function(r) {
+        return "  " + r + ": " + fmt(_AGG.riskOverdue[r] || 0);
+      }).join("\n");
+
+  /* ── Top 10 by overdue amount (matches Top-10 bar chart) ────────────────── */
+  const top10OverdueBlock =
+    "\n=== Top 10 Vendors by Overdue Amount (matches dashboard chart) ===\n"
+    + _AGG.top10ByOverdue.map(function(v, i) {
+        return "  " + (i+1) + ". " + v.vendor_name + " (" + v.vendor_id + ")"
+          + " | Overdue:" + fmt(v.overdue_amount)
+          + " | Score:" + Number(v.risk_score).toFixed(1)
+          + " | " + v.predicted_risk;
+      }).join("\n");
+
+  /* ── Top 10 by risk score (matches dashboard preview table) ─────────────── */
+  const top10ScoreBlock =
+    "\n=== Top 10 Vendors by Risk Score (matches dashboard table) ===\n"
+    + _AGG.top10ByScore.map(function(v, i) {
+        return "  " + (i+1) + ". " + v.vendor_name + " (" + v.vendor_id + ")"
+          + " | Score:" + Number(v.risk_score).toFixed(1)
+          + " | Overdue:" + fmt(v.overdue_amount)
+          + " | " + v.predicted_risk
+          + " | MaxDays:" + Math.round(v.max_days_overdue || 0);
+      }).join("\n");
+
+  /* ── Country & payment term breakdowns (from ai_context) ────────────────── */
+  let countryBlock = "";
+  if (AI_CTX && AI_CTX.country_distribution && Object.keys(AI_CTX.country_distribution).length) {
+    countryBlock = "\n=== Overdue by Country (top 10) ===\n"
+      + Object.entries(AI_CTX.country_distribution)
+          .map(function(e) { return "  " + (e[0] || "Unknown") + ": " + fmt(e[1]); })
+          .join("\n");
+  }
+  let ztermBlock = "";
+  if (AI_CTX && AI_CTX.payment_terms_distribution && Object.keys(AI_CTX.payment_terms_distribution).length) {
+    ztermBlock = "\n=== Payment Terms Distribution ===\n"
+      + Object.entries(AI_CTX.payment_terms_distribution)
+          .map(function(e) { return "  " + (e[0] || "Unknown") + ": " + e[1] + " vendors"; })
+          .join("\n");
+  }
+  let bukrsBlock = "";
+  if (AI_CTX && AI_CTX.company_code_distribution && Object.keys(AI_CTX.company_code_distribution).length) {
+    bukrsBlock = "\n=== Overdue by Company Code ===\n"
+      + Object.entries(AI_CTX.company_code_distribution)
+          .map(function(e) { return "  " + (e[0] || "Unknown") + ": " + fmt(e[1]); })
+          .join("\n");
+  }
+
+  /* ── Most overdue individual invoices (from ai_context) ─────────────────── */
+  let invoiceBlock = "";
+  if (AI_CTX && AI_CTX.top50_most_overdue_invoices && AI_CTX.top50_most_overdue_invoices.length) {
+    invoiceBlock = "\n=== Top 20 Most Overdue Individual Invoices ===\n"
+      + "  (vendor_id | amount | days_overdue | bucket)\n"
+      + AI_CTX.top50_most_overdue_invoices.slice(0, 20).map(function(inv) {
+          return "  " + (inv.vendor_id || "?")
+            + " | " + fmt(inv.amount || 0)
+            + " | " + Math.round(inv.days_overdue || 0) + "d"
+            + " | " + (inv.aging_bucket || "?");
+        }).join("\n");
+  }
+
+  /* ── Full vendor table — ALL vendors, compact format ────────────────────── */
+  // Check if country/payment-term fields are present
+  const sampleV  = VENDORS[0] || {};
+  const hasExtra = !!(sampleV.country || sampleV.LAND1);
+  const totalVend = VENDORS.length;
+  const tableHeader = "\n=== Complete Vendor Table (" + totalVend + " vendors"
+    + (hasExtra ? ", includes country & payment term" : "") + ") ===\n"
+    + "Format: id|name|risk_level|score|overdue_amt|avg_days_OD|max_days_OD|invoices"
+    + (hasExtra ? "|country|payment_term" : "") + "\n";
+
+  const rows = VENDORS.map(function(v) {
+    var base = (v.vendor_id || "?")
+      + "|" + (v.vendor_name || "Unknown")
+      + "|" + (v.predicted_risk || "?")
+      + "|" + Number(v.risk_score || 0).toFixed(1)
+      + "|" + Number(v.overdue_amount || 0).toFixed(0)
+      + "|" + Number(v.avg_days_overdue || 0).toFixed(0)
+      + "|" + Math.round(v.max_days_overdue || 0)
+      + "|" + Math.round(v.total_invoices || 0);
+    if (hasExtra) {
+      base += "|" + (v.country || v.LAND1 || "?")
+           +  "|" + (v.payment_term || v.ZTERM || v.zterm || "?");
+    }
+    return base;
   }).join("\n");
 
-  const rows = VENDORS.slice(0, maxVendors).map(function(v) {
-    return v.vendor_id + "|" + v.vendor_name + "|" + v.predicted_risk
-      + "|" + v.risk_score.toFixed(1)
-      + "|" + v.overdue_amount.toFixed(0)
-      + "|" + v.avg_days_overdue.toFixed(0)
-      + "|" + v.max_days_overdue
-      + "|" + v.total_invoices;
-  }).join("\n");
+  let statsBlock = "";
+  if (AI_CTX && AI_CTX.total_invoices_processed) {
+    statsBlock = "\n=== Dataset Stats ===\n"
+      + "  Total invoice lines processed: "
+      + AI_CTX.total_invoices_processed.toLocaleString() + "\n";
+  }
 
-  const note = VENDORS.length > maxVendors
-    ? "\n(Showing " + maxVendors + " of " + VENDORS.length + " vendors sorted by risk score)"
-    : "";
-
-  return "=== KPIs ===\n"
-    + "Total vendors : " + (KPI.total_vendors || 0) + "\n"
-    + "Overdue total : " + fmt(KPI.total_overdue || 0) + "\n"
-    + "High risk     : " + (KPI.high_risk || 0) + "\n"
-    + "Critical      : " + (KPI.critical  || 0) + "\n\n"
-    + "=== Aging Buckets ===\n" + aging + "\n\n"
-    + "=== Risk Distribution ===\n" + dist + "\n\n"
-    + "=== Top 10 Riskiest Vendors ===\n" + top + "\n\n"
-    + "=== Vendor Table (id|name|risk_level|score|overdue_amt|avg_days_OD|max_days_OD|invoices) ===" + note + "\n"
+  return kpiBlock + "\n"
+    + agingBlock + "\n"
+    + distBlock
+    + riskOverdueBlock + "\n"
+    + top10OverdueBlock
+    + top10ScoreBlock + "\n"
+    + countryBlock
+    + ztermBlock
+    + bukrsBlock
+    + statsBlock + "\n"
+    + invoiceBlock
+    + tableHeader
     + rows;
 }
-
 /* ── formatters ─────────────────────────────────────────────────────────── */
 function fmt(n) {
   n = Number(n) || 0;
