@@ -9,15 +9,20 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
 
-    /* ── Single column layout ── */
+    /* ══════════════════════════════════════════════
+       AI Intelligence — single column, full width
+    ══════════════════════════════════════════════ */
+
     .intel-grid {
       display: flex;
       flex-direction: column;
       gap: 20px;
+      width: 100%;
     }
 
-    /* ── Section card ── */
+    /* ── Generic section card ── */
     .intel-section {
+      width: 100%;
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -38,11 +43,12 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      margin: 0;
     }
     .section-head p {
       font-size: 12px;
       color: var(--text-secondary);
-      margin-top: 3px;
+      margin: 3px 0 0 0;
     }
     .section-body { padding: 18px 20px; }
 
@@ -215,8 +221,11 @@
       100% { background-position:-200% 0; }
     }
 
-    /* ── Chatbot ── */
+    /* ══════════════════════════════════════════════
+       CHATBOT — full width card, below the two cards
+    ══════════════════════════════════════════════ */
     .chat-panel {
+      width: 100%;
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -226,6 +235,7 @@
       height: 520px;
       position: static;
     }
+
     .chat-head {
       padding: 14px 18px;
       border-bottom: 1px solid var(--border);
@@ -240,108 +250,164 @@
       border-radius: 10px;
       background: linear-gradient(135deg,#10d97e,#059669);
       display: flex; align-items: center; justify-content: center;
-      font-size: 16px; color: #fff; flex-shrink:0;
+      font-size: 16px; color: #fff; flex-shrink: 0;
     }
-    .chat-head-info h4 { font-size:14px; font-weight:600; font-family:var(--font-display); }
-    .chat-head-info p  {
-      font-size:11px; color:var(--risk-low);
-      display:flex; align-items:center; gap:5px;
+    .chat-head-info h4 {
+      font-size: 14px; font-weight: 600;
+      font-family: var(--font-display);
+      margin: 0;
+    }
+    .chat-head-info p {
+      font-size: 11px; color: var(--risk-low);
+      display: flex; align-items: center; gap: 5px;
+      margin: 2px 0 0 0;
     }
     .chat-head-info p::before {
-      content:''; width:6px; height:6px;
-      background:var(--risk-low); border-radius:50%; display:inline-block;
+      content: ''; width: 6px; height: 6px;
+      background: var(--risk-low); border-radius: 50%;
+      display: inline-block;
       animation: pulse 2s infinite;
     }
     @keyframes pulse {
       0%,100% { opacity:1; } 50% { opacity:.4; }
     }
 
+    /* ── Messages area ── */
     .chat-msgs {
-      flex:1; overflow-y:auto; padding:14px;
-      display:flex; flex-direction:column; gap:10px;
-      scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.07) transparent;
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.07) transparent;
     }
-    .chat-msgs::-webkit-scrollbar { width:3px; }
-    .chat-msgs::-webkit-scrollbar-thumb { background:rgba(255,255,255,.07); border-radius:2px; }
+    .chat-msgs::-webkit-scrollbar { width: 3px; }
+    .chat-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 2px; }
 
-    .msg { display:flex; gap:8px; }
-    .msg.user { flex-direction:row-reverse; }
+    /* ── Individual message row ── */
+    .msg {
+      display: flex;
+      flex-direction: row;      /* always left→right by default */
+      align-items: flex-start;
+      gap: 8px;
+      width: 100%;
+    }
+    .msg.user {
+      flex-direction: row-reverse;  /* user: avatar on right */
+    }
 
     .msg-av {
-      width:28px; height:28px; border-radius:8px;
-      display:flex; align-items:center; justify-content:center;
-      font-size:12px; flex-shrink:0; margin-top:2px;
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+      margin-top: 2px;
     }
-    .msg.bot  .msg-av { background:linear-gradient(135deg,#10d97e,#059669); color:#fff; }
-    .msg.user .msg-av { background:rgba(61,127,255,.2); color:var(--accent-light); }
+    .msg.bot  .msg-av { background: linear-gradient(135deg,#10d97e,#059669); color: #fff; }
+    .msg.user .msg-av { background: rgba(61,127,255,.2); color: var(--accent-light); }
 
+    /* ── Bubble: BLOCK, not grid ── */
     .msg-bub {
-      max-width:86%; padding:9px 13px; border-radius:12px;
-      font-size:13px; line-height:1.6;
+      display: block;           /* ensures content flows as normal text */
+      max-width: 80%;
+      padding: 9px 13px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.65;
+      word-break: break-word;
     }
     .msg.bot  .msg-bub {
-      background:rgba(255,255,255,.04); border:1px solid var(--border);
-      color:var(--text-primary); border-top-left-radius:3px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-top-left-radius: 3px;
     }
     .msg.user .msg-bub {
-      background:rgba(61,127,255,.14); border:1px solid rgba(61,127,255,.22);
-      color:#dbeafe; border-top-right-radius:3px;
+      background: rgba(61,127,255,.14);
+      border: 1px solid rgba(61,127,255,.22);
+      color: #dbeafe;
+      border-top-right-radius: 3px;
     }
-    .msg-bub strong { color:var(--accent-light); }
+    .msg-bub strong { color: var(--accent-light); }
 
-    .typing-ind { display:flex; align-items:center; gap:4px; padding:8px 12px; }
+    /* ── Bullet list inside bubble ── */
+    .msg-bub ul {
+      margin: 6px 0 0 0;
+      padding-left: 16px;
+      list-style: disc;
+    }
+    .msg-bub ul li {
+      margin-bottom: 4px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    /* ── Typing indicator ── */
+    .typing-ind { display: flex; align-items: center; gap: 4px; padding: 8px 12px; }
     .t-dot {
-      width:7px; height:7px; border-radius:50%;
-      background:var(--text-secondary);
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-secondary);
       animation: tdot 1.2s infinite ease-in-out;
     }
-    .t-dot:nth-child(2) { animation-delay:.2s; }
-    .t-dot:nth-child(3) { animation-delay:.4s; }
+    .t-dot:nth-child(2) { animation-delay: .2s; }
+    .t-dot:nth-child(3) { animation-delay: .4s; }
     @keyframes tdot {
-      0%,80%,100% { transform:scale(.7); opacity:.4; }
-      40%          { transform:scale(1);  opacity:1;  }
+      0%,80%,100% { transform: scale(.7); opacity: .4; }
+      40%          { transform: scale(1);  opacity: 1;  }
     }
 
+    /* ── Suggestion chips ── */
     .chat-suggest {
-      display:flex; flex-wrap:wrap; gap:6px;
-      padding:0 14px 10px;
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 0 14px 10px;
       flex-shrink: 0;
     }
     .sug-btn {
-      padding:4px 11px; border-radius:16px;
-      border:1px solid rgba(16,217,126,.2);
-      background:rgba(16,217,126,.06); color:#6ee7b7;
-      font-size:11px; cursor:pointer; transition:all .18s;
+      padding: 4px 11px; border-radius: 16px;
+      border: 1px solid rgba(16,217,126,.2);
+      background: rgba(16,217,126,.06); color: #6ee7b7;
+      font-size: 11px; cursor: pointer; transition: all .18s;
     }
-    .sug-btn:hover { background:rgba(16,217,126,.16); border-color:var(--risk-low); }
+    .sug-btn:hover { background: rgba(16,217,126,.16); border-color: var(--risk-low); }
 
+    /* ── Input row ── */
     .chat-foot {
-      padding:11px 14px; border-top:1px solid var(--border);
-      display:flex; gap:8px; flex-shrink: 0;
+      padding: 11px 14px;
+      border-top: 1px solid var(--border);
+      display: flex; gap: 8px;
+      flex-shrink: 0;
     }
     .chat-inp {
-      flex:1; background:rgba(255,255,255,.04);
-      border:1px solid var(--border-strong); border-radius:10px;
-      padding:9px 12px; color:var(--text-primary);
-      font-family:var(--font); font-size:13px;
-      outline:none; resize:none; height:40px;
-      transition:border-color .18s;
+      flex: 1;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      padding: 9px 12px;
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none; resize: none; height: 40px;
+      transition: border-color .18s;
     }
-    .chat-inp:focus { border-color:var(--risk-low); }
-    .chat-inp::placeholder { color:var(--text-secondary); }
+    .chat-inp:focus { border-color: var(--risk-low); }
+    .chat-inp::placeholder { color: var(--text-secondary); }
 
     .btn-send {
-      width:40px; height:40px; border-radius:10px;
-      border:none; background:linear-gradient(135deg,#10d97e,#059669);
-      color:#fff; font-size:14px; cursor:pointer;
-      transition:opacity .18s; flex-shrink:0;
-      display:flex; align-items:center; justify-content:center;
+      width: 40px; height: 40px; border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg,#10d97e,#059669);
+      color: #fff; font-size: 14px; cursor: pointer;
+      transition: opacity .18s; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
     }
-    .btn-send:hover    { opacity:.85; }
-    .btn-send:disabled { opacity:.35; cursor:not-allowed; }
+    .btn-send:hover    { opacity: .85; }
+    .btn-send:disabled { opacity: .35; cursor: not-allowed; }
 
-    .err-msg { color:#ef4444; font-size:13px; padding:8px 0; }
-    .err-msg i { margin-right:6px; }
+    .err-msg { color: #ef4444; font-size: 13px; padding: 8px 0; }
+    .err-msg i { margin-right: 6px; }
 
   </style>
 </head>
@@ -372,10 +438,10 @@
       <div class="header-badge"><i class="fas fa-brain"></i> AI Powered</div>
     </header>
 
-    <!-- Single column — 3 cards stacked vertically -->
+    <!-- Three cards stacked in a single column -->
     <div class="intel-grid">
 
-      <!-- Card 1: NL Query -->
+      <!-- Card 1: Natural Language Query -->
       <div class="intel-section">
         <div class="section-head nl">
           <div>
@@ -403,7 +469,7 @@
         </div>
       </div>
 
-      <!-- Card 2: AI Insights -->
+      <!-- Card 2: AI-Generated Insights -->
       <div class="intel-section">
         <div class="section-head ins">
           <div>
@@ -422,7 +488,7 @@
         </div>
       </div>
 
-      <!-- Card 3: Chatbot -->
+      <!-- Card 3: VendorRisk Chatbot -->
       <div class="chat-panel">
         <div class="chat-head">
           <div class="chat-avatar"><i class="fas fa-robot"></i></div>

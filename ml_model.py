@@ -1,5 +1,3 @@
-
-
 import os
 import pandas as pd
 import numpy as np
@@ -9,17 +7,6 @@ from sklearn.preprocessing import StandardScaler
 from scipy.spatial.distance import cdist
 import warnings
 warnings.filterwarnings("ignore")
-
-# ── Aging reference date ───────────────────────────────────────────────────────
-# Set AGING_REFERENCE_DATE env var (YYYY-MM-DD) to anchor aging calculations to
-# a specific date instead of today.  Useful when AP data is historically old and
-# all invoices would otherwise fall into the 120+ bucket.
-# Example (Heroku): heroku config:set AGING_REFERENCE_DATE=2023-02-25
-_ref_env = os.environ.get("AGING_REFERENCE_DATE", "").strip()
-try:
-    AGING_REFERENCE_DATE = datetime.strptime(_ref_env, "%Y-%m-%d") if _ref_env else datetime.today()
-except ValueError:
-    AGING_REFERENCE_DATE = datetime.today()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -34,20 +21,67 @@ def run_vendor_risk_analysis(bsik_path: str, lfa1_path: str, lfb1_path: str) -> 
     lfa1 = _load_lfa1(lfa1_path)
     lfb1 = _load_lfb1(lfb1_path)
 
-    # 2. Aging buckets on raw transactions
-    bsik = _compute_aging(bsik)
+    # 2. Determine aging reference date:
+    #    Priority: AGING_REFERENCE_DATE env var → max date in dataset → today
+    bsik, aging_ref = _resolve_aging_reference(bsik)
 
-    # 3. Vendor-level feature engineering
-    vendor_df = _engineer_features(bsik)
+    # 3. Aging buckets on raw transactions
+    bsik = _compute_aging(bsik, aging_ref)
 
-    # 4. Merge vendor master data
+    # 4. Vendor-level feature engineering
+    vendor_df = _engineer_features(bsik, aging_ref)
+
+    # 5. Merge vendor master data
     vendor_df = _merge_master(vendor_df, lfa1, lfb1)
 
-    # 5. Pure K-Means: cluster + derive risk score from centroid geometry
+    # 6. Pure K-Means: cluster + derive risk score from centroid geometry
     vendor_df, scaler, centroids = _kmeans_cluster_and_score(vendor_df)
 
-    # 6. Build structured result payload
+    # 7. Build structured result payload
     return _build_result(vendor_df, bsik)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AGING REFERENCE DATE RESOLUTION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _resolve_aging_reference(bsik: pd.DataFrame):
+    """
+    Determine the best reference date for aging calculations.
+
+    Priority order:
+      1. AGING_REFERENCE_DATE env var (YYYY-MM-DD) — explicit override
+      2. Max date found in ZFBDT / BLDAT columns of the dataset
+         (anchors aging to the data's own time horizon, not today)
+      3. datetime.today() — fallback if no dates exist in data
+
+    Using the dataset's max date prevents all invoices from being pushed
+    into the 120+ bucket when AP data is historically old.
+    """
+    # Check env var first
+    _ref_env = os.environ.get("AGING_REFERENCE_DATE", "").strip()
+    if _ref_env:
+        try:
+            return bsik, datetime.strptime(_ref_env, "%Y-%m-%d")
+        except ValueError:
+            pass  # fall through to auto-detect
+
+    # Auto-detect from data: use the latest date present in the dataset
+    date_col = "ZFBDT" if "ZFBDT" in bsik.columns else "BLDAT" if "BLDAT" in bsik.columns else None
+    if date_col:
+        max_date = bsik[date_col].dropna().max()
+        if pd.notna(max_date):
+            # Convert to pandas Timestamp, then find end-of-that-month
+            ts = pd.Timestamp(max_date)
+            # First day of next month, minus one day = last day of current month
+            if ts.month < 12:
+                end_of_month = pd.Timestamp(year=ts.year, month=ts.month + 1, day=1) - pd.Timedelta(days=1)
+            else:
+                end_of_month = pd.Timestamp(year=ts.year + 1, month=1, day=1) - pd.Timedelta(days=1)
+            ref = end_of_month.to_pydatetime()
+            return bsik, ref
+
+    return bsik, datetime.today()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -110,13 +144,12 @@ def _remap_columns(df: pd.DataFrame, col_map: dict) -> pd.DataFrame:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# AGING ANALYSIS  
+# AGING ANALYSIS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _compute_aging(df: pd.DataFrame) -> pd.DataFrame:
-    today = AGING_REFERENCE_DATE
+def _compute_aging(df: pd.DataFrame, aging_ref: datetime) -> pd.DataFrame:
     date_col = "ZFBDT" if "ZFBDT" in df.columns else "BLDAT"
-    df["DAYS_OVERDUE"] = (today - df[date_col]).dt.days.clip(lower=0)
+    df["DAYS_OVERDUE"] = (aging_ref - df[date_col]).dt.days.clip(lower=0)
     bins   = [-1, 30, 60, 90, 120, float("inf")]
     labels = ["0-30", "31-60", "61-90", "91-120", "120+"]
     df["AGING_BUCKET"] = pd.cut(df["DAYS_OVERDUE"], bins=bins, labels=labels)
@@ -127,7 +160,7 @@ def _compute_aging(df: pd.DataFrame) -> pd.DataFrame:
 # FEATURE ENGINEERING
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+def _engineer_features(df: pd.DataFrame, aging_ref: datetime) -> pd.DataFrame:
     """
     Build a rich, multi-dimensional feature set per vendor from raw AP lines.
 
@@ -142,28 +175,24 @@ def _engineer_features(df: pd.DataFrame) -> pd.DataFrame:
       AMOUNT_CONCENTRATION   – Herfindahl-style: one huge invoice = riskier
       RECENCY_DAYS           – age of the oldest outstanding item
     """
-    today = AGING_REFERENCE_DATE
-    agg = df.groupby("LIFNR").apply(_vendor_feature_row, today=today).reset_index()
+    agg = df.groupby("LIFNR").apply(_vendor_feature_row, aging_ref=aging_ref).reset_index()
     return agg
 
 
-def _vendor_feature_row(grp: pd.DataFrame, today) -> pd.Series:
+def _vendor_feature_row(grp: pd.DataFrame, aging_ref) -> pd.Series:
     amounts   = grp["DMBTR"]
     days      = grp["DAYS_OVERDUE"]
     total_amt = amounts.sum()
     n         = len(grp)
 
-    # Proportion of invoices critically overdue (90+ days)
     pct_critical = (days >= 90).sum() / max(n, 1)
 
-    # Invoice amount concentration (HHI-style)
     shares        = (amounts / total_amt) if total_amt > 0 else (amounts * 0)
     concentration = float((shares ** 2).sum())
 
-    # Days since the oldest outstanding document
     date_col    = "ZFBDT" if "ZFBDT" in grp.columns else "BLDAT"
     valid_dates = grp[date_col].dropna()
-    recency     = float((today - valid_dates.min()).days) if len(valid_dates) else 0.0
+    recency     = float((aging_ref - valid_dates.min()).days) if len(valid_dates) else 0.0
 
     return pd.Series({
         "TOTAL_OVERDUE_AMOUNT":  round(float(total_amt), 2),
@@ -208,21 +237,6 @@ _RISK_LABELS = ["Low", "Medium", "High", "Critical"]
 
 
 def _kmeans_cluster_and_score(df: pd.DataFrame):
-    """
-    Cluster vendors and derive a continuous RISK_SCORE purely from K-Means geometry.
-
-    Steps:
-      1. Fit K-Means (k=4) on scaled features.
-      2. Rank clusters by their centroid's composite danger score
-         (direction-only weights — K-Means owns the actual grouping).
-      3. Assign PREDICTED_RISK label from cluster rank.
-      4. Derive RISK_SCORE (0–100) via centroid-distance interpolation:
-           • Each cluster occupies a 25-point band (Low=0-25, Medium=25-50, …)
-           • Within the band, score is proportional to how far the vendor sits
-             from its own centroid toward the riskier end of the space.
-         Result: continuous score, not a step function — two vendors in the same
-         cluster will still have meaningfully different scores.
-    """
     X_raw    = df[_CLUSTER_FEATURES].fillna(0)
     scaler   = StandardScaler()
     X_scaled = scaler.fit_transform(X_raw)
@@ -231,37 +245,33 @@ def _kmeans_cluster_and_score(df: pd.DataFrame):
     labels = kmeans.fit_predict(X_scaled)
     df["CLUSTER"] = labels
 
-    centroids = kmeans.cluster_centers_   # shape (4, n_features)
+    centroids = kmeans.cluster_centers_
 
-    # ── Rank clusters from safest to riskiest via centroid danger score ────────
-    # Weights encode only *direction* (higher = riskier) for each feature.
-    # K-Means still decides actual cluster membership with equal feature weight.
     direction_weights = np.array([
-        0.30,   # TOTAL_OVERDUE_AMOUNT   – primary financial exposure
-        0.10,   # TOTAL_INVOICES         – volume
-        0.25,   # MAX_DAYS_OVERDUE       – worst breach
-        0.20,   # AVG_DAYS_OVERDUE       – chronic behaviour
-        0.10,   # PCT_CRITICAL_INVOICES  – severity breadth
-        0.03,   # AMOUNT_CONCENTRATION   – structural signal (minor)
-        0.02,   # RECENCY_DAYS           – age of exposure (minor)Age of oldest unpaid invoice
+        0.30,   # TOTAL_OVERDUE_AMOUNT
+        0.10,   # TOTAL_INVOICES
+        0.25,   # MAX_DAYS_OVERDUE
+        0.20,   # AVG_DAYS_OVERDUE
+        0.10,   # PCT_CRITICAL_INVOICES
+        0.03,   # AMOUNT_CONCENTRATION
+        0.02,   # RECENCY_DAYS
     ])
 
-    centroid_danger = centroids @ direction_weights          # scalar per cluster
-    cluster_rank    = np.argsort(np.argsort(centroid_danger))  # 0=safest … 3=riskiest
+    centroid_danger = centroids @ direction_weights
+    cluster_rank    = np.argsort(np.argsort(centroid_danger))
 
     risk_label_map       = {c: _RISK_LABELS[cluster_rank[c]] for c in range(4)}
     df["PREDICTED_RISK"] = df["CLUSTER"].map(risk_label_map)
 
-    # ── Continuous RISK_SCORE from centroid-distance interpolation ─────────────
-    distances  = cdist(X_scaled, centroids, metric="euclidean")   # (n, 4)
+    distances  = cdist(X_scaled, centroids, metric="euclidean")
     vendor_idx = np.arange(len(df))
 
     band_size  = 25.0
-    band_floor = cluster_rank[df["CLUSTER"].values] * band_size   # per-vendor base
+    band_floor = cluster_rank[df["CLUSTER"].values] * band_size
 
     own_dist   = distances[vendor_idx, df["CLUSTER"].values]
     max_dist   = distances.max(axis=1).clip(min=1e-9)
-    within_pos = (own_dist / max_dist) * band_size                # 0 … band_size
+    within_pos = (own_dist / max_dist) * band_size
 
     df["RISK_SCORE"] = np.clip(band_floor + within_pos, 0, 100).round(2)
 
@@ -279,17 +289,14 @@ def _build_result(vendor_df: pd.DataFrame, bsik: pd.DataFrame) -> dict:
     high_risk     = int((vendor_df["PREDICTED_RISK"] == "High").sum())
     critical      = int((vendor_df["PREDICTED_RISK"] == "Critical").sum())
 
-    # ── Aging bucket distribution ──────────────────────────────────────────────
     aging = bsik.groupby("AGING_BUCKET", observed=True)["DMBTR"].sum().to_dict()
     for b in ["0-30", "31-60", "61-90", "91-120", "120+"]:
         aging.setdefault(b, 0)
 
-    # ── Risk distribution ──────────────────────────────────────────────────────
     risk_dist = vendor_df["PREDICTED_RISK"].value_counts().to_dict()
     for r in _RISK_LABELS:
         risk_dist.setdefault(r, 0)
 
-    # ── Shared column rename map ───────────────────────────────────────────────
     _rename = {
         "LIFNR":                "vendor_id",
         "NAME1":                "vendor_name",
@@ -303,7 +310,6 @@ def _build_result(vendor_df: pd.DataFrame, bsik: pd.DataFrame) -> dict:
         "PREDICTED_RISK":       "predicted_risk",
     }
 
-    # ── Top-10 riskiest vendors ────────────────────────────────────────────────
     top10_cols = ["LIFNR", "NAME1", "TOTAL_OVERDUE_AMOUNT", "RISK_SCORE", "PREDICTED_RISK"]
     top10 = (
         vendor_df.nlargest(10, "RISK_SCORE")[top10_cols]
@@ -311,7 +317,6 @@ def _build_result(vendor_df: pd.DataFrame, bsik: pd.DataFrame) -> dict:
         .to_dict(orient="records")
     )
 
-    # ── Scatter data (all vendors, lightweight) ────────────────────────────────
     scatter_cols = ["LIFNR", "NAME1", "TOTAL_OVERDUE_AMOUNT", "RISK_SCORE", "PREDICTED_RISK"]
     scatter = (
         vendor_df[scatter_cols]
@@ -319,7 +324,6 @@ def _build_result(vendor_df: pd.DataFrame, bsik: pd.DataFrame) -> dict:
         .to_dict(orient="records")
     )
 
-    # ── Full vendor table ──────────────────────────────────────────────────────
     table_cols = [
         "LIFNR", "NAME1",
         "TOTAL_OVERDUE_AMOUNT", "TOTAL_INVOICES",

@@ -19,6 +19,102 @@ const TOP10         = RAW_DATA.top10     || [];
 let chatHistory = [];
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   MARKDOWN → HTML RENDERER
+   Converts AI markdown responses into clean, styled HTML bubbles.
+   ═══════════════════════════════════════════════════════════════════════════ */
+function renderMarkdown(text) {
+  if (!text) return "";
+
+  // If the text already looks like HTML (starts with a tag), return as-is
+  if (/^\s*<[a-z]/i.test(text)) return text;
+
+  const lines = text.split("\n");
+  let html = "";
+  let inOL = false;
+  let inUL = false;
+
+  const closeList = () => {
+    if (inOL) { html += "</ol>"; inOL = false; }
+    if (inUL) { html += "</ul>"; inUL = false; }
+  };
+
+  const inlineFormat = (s) => s
+    // **bold**
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--accent-light)">$1</strong>')
+    // *italic*
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    // `code`
+    .replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>')
+    // currency shorthand
+    .replace(/Rs\./g, "₹");
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw  = lines[i];
+    const line = raw.trim();
+
+    // Empty line → paragraph break
+    if (!line) {
+      closeList();
+      html += "<br>";
+      continue;
+    }
+
+    // ### Heading
+    if (/^#{1,3}\s+/.test(line)) {
+      closeList();
+      const content = inlineFormat(line.replace(/^#{1,3}\s+/, ""));
+      html += `<div style="font-family:var(--font-display);font-weight:700;font-size:13px;color:var(--accent-light);margin:10px 0 5px 0">${content}</div>`;
+      continue;
+    }
+
+    // **Bold line acting as a header** (entire line is bold)
+    if (/^\*\*[^*]+\*\*:?\s*$/.test(line)) {
+      closeList();
+      const content = inlineFormat(line);
+      html += `<div style="font-weight:600;color:var(--accent-light);margin:8px 0 3px 0">${content}</div>`;
+      continue;
+    }
+
+    // Numbered list: "1. item" or "1) item"
+    if (/^\d+[.)]\s+/.test(line)) {
+      if (inUL) { html += "</ul>"; inUL = false; }
+      if (!inOL) {
+        html += `<ol style="margin:6px 0;padding-left:20px;display:flex;flex-direction:column;gap:3px">`;
+        inOL = true;
+      }
+      const content = inlineFormat(line.replace(/^\d+[.)]\s+/, ""));
+      html += `<li style="font-size:13px;line-height:1.55">${content}</li>`;
+      continue;
+    }
+
+    // Unordered list: "- item" or "• item" or "* item"
+    if (/^[-•*]\s+/.test(line)) {
+      if (inOL) { html += "</ol>"; inOL = false; }
+      if (!inUL) {
+        html += `<ul style="margin:6px 0;padding-left:18px;display:flex;flex-direction:column;gap:3px">`;
+        inUL = true;
+      }
+      const content = inlineFormat(line.replace(/^[-•*]\s+/, ""));
+      html += `<li style="font-size:13px;line-height:1.55">${content}</li>`;
+      continue;
+    }
+
+    // Regular paragraph line
+    closeList();
+    html += `<span style="display:block;margin-bottom:2px">${inlineFormat(line)}</span>`;
+  }
+
+  closeList();
+
+  // Clean up multiple consecutive <br> tags
+  html = html.replace(/(<br>\s*){3,}/g, "<br><br>");
+  // Remove leading/trailing <br>
+  html = html.replace(/^(<br>)+|(<br>)+$/g, "");
+
+  return html;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════════════════════════════════ */
 document.addEventListener("DOMContentLoaded", () => {
@@ -146,10 +242,12 @@ function bootChat() {
 
   addBot(`Hello! I am your <strong>VendorRisk AI Assistant</strong>.<br><br>
 Here is your portfolio snapshot:<br>
-&bull; <strong>${KPI.total_vendors || 0}</strong> vendors analysed<br>
-&bull; <strong>${totalOD}</strong> total overdue exposure<br>
-&bull; <strong>${critical}</strong> vendors flagged <strong>Critical</strong><br>
-&bull; Highest risk: <strong>${topV ? topV.vendor_name : "N/A"}</strong> (score ${topV ? topV.risk_score.toFixed(1) : "N/A"})<br><br>
+<ul style="margin:6px 0;padding-left:18px;display:flex;flex-direction:column;gap:4px">
+  <li><strong style="color:var(--accent-light)">${KPI.total_vendors || 0}</strong> vendors analysed</li>
+  <li><strong style="color:var(--accent-light)">${totalOD}</strong> total overdue exposure</li>
+  <li><strong style="color:#ef4444">${critical}</strong> vendors flagged <strong style="color:#ef4444">Critical</strong></li>
+  <li>Highest risk: <strong style="color:var(--accent-light)">${topV ? topV.vendor_name : "N/A"}</strong> (score ${topV ? topV.risk_score.toFixed(1) : "N/A"})</li>
+</ul><br>
 Ask me anything about vendor risk, payment priorities, or aging trends.`);
 
   showSugs(["Who needs immediate attention?", "Explain the risk scoring", "Which vendors to pay first?", "What is driving our overdue?"]);
@@ -171,11 +269,12 @@ window.sendChat = async function() {
   if (chatHistory.length > 18) chatHistory = chatHistory.slice(-14);
 
   try {
-    const reply = await callAI(chatHistory, chatSystem(), 500);
+    const raw   = await callAI(chatHistory, chatSystem(), 500);
+    const reply = renderMarkdown(raw);
     removeTyping();
     addBot(reply);
-    chatHistory.push({ role: "assistant", content: reply });
-    const sugs = followups(text, reply);
+    chatHistory.push({ role: "assistant", content: raw });
+    const sugs = followups(text, raw);
     if (sugs.length) showSugs(sugs);
   } catch (e) {
     removeTyping();
@@ -191,18 +290,19 @@ function chatSystem() {
 ${buildSnapshot(25)}
 
 Rules:
-- Reply in HTML only. Use strong tags, br tags, and bullet characters. No markdown, no backticks.
+- Reply using plain text with markdown formatting ONLY: **bold**, bullet lists with "- item", numbered lists with "1. item".
+- Do NOT use HTML tags in your response.
 - Keep replies under 160 words unless a detailed list is needed.
-- Currency in Indian rupee format.
-- Bold vendor names.
-- Always give an actionable recommendation when relevant.`;
+- Use short sections with a bold heading then bullets below it.
+- Currency in Indian rupee format (Cr, L).
+- Always give a short actionable recommendation at the end.`;
 }
 
 function followups(q, r) {
   const s = (q + r).toLowerCase();
-  if (s.includes("critical"))                      return ["Show critical vendor details", "How to reduce critical risk?"];
-  if (s.includes("pay") || s.includes("priorit"))  return ["Top vendor overdue totals", "Show aging breakdown"];
-  if (s.includes("score") || s.includes("risk"))   return ["What makes a vendor high risk?", "How is risk calculated?"];
+  if (s.includes("critical"))                       return ["Show critical vendor details", "How to reduce critical risk?"];
+  if (s.includes("pay") || s.includes("priorit"))   return ["Top vendor overdue totals", "Show aging breakdown"];
+  if (s.includes("score") || s.includes("risk"))    return ["What makes a vendor high risk?", "How is risk calculated?"];
   if (s.includes("aging") || s.includes("overdue")) return ["Vendors 120+ days overdue", "Overdue by risk level"];
   return [];
 }
